@@ -12,7 +12,6 @@ export function normalizeAngle(angle: number): number {
   return ((angle % 360) + 360) % 360;
 }
 
-// Добавляем недостающую функцию
 export function calculateRectBorder(rect: Rect): {
   left: number;
   right: number;
@@ -27,10 +26,20 @@ export function calculateRectBorder(rect: Rect): {
   };
 }
 
+export function getRectBordersWithMargin(rect: Rect, margin: number) {
+  const borders = calculateRectBorder(rect);
+  return {
+    left: borders.left - margin,
+    right: borders.right + margin,
+    top: borders.top - margin,
+    bottom: borders.bottom + margin
+  };
+}
+
 export function isPointOnRectBorder(
   point: Point,
   rect: Rect,
-  epsilon = 0.1
+  epsilon = 0.5
 ): boolean {
   const { left, right, top, bottom } = calculateRectBorder(rect);
 
@@ -51,7 +60,7 @@ export function isAngleValidForPoint(
   point: Point,
   rect: Rect,
   angle: number,
-  epsilon = 5
+  epsilon = 1 
 ): boolean {
   const { left, right, top, bottom } = calculateRectBorder(rect);
   let expectedAngle = 0;
@@ -66,6 +75,20 @@ export function isAngleValidForPoint(
     expectedAngle = 90;
   }
 
-  const angleDiff = Math.abs(normalizeAngle(angle) - normalizeAngle(expectedAngle));
+  const normalizedAngle = normalizeAngle(angle);
+  const angleDiff = Math.abs(normalizedAngle - expectedAngle);
+  
   return angleDiff < epsilon || angleDiff > 360 - epsilon;
+}
+
+export function snapPointToBorder(point: Point, rect: Rect): Point {
+  const { left, right, top, bottom } = calculateRectBorder(rect);
+  const epsilon = 5;
+  
+  if (Math.abs(point.x - left) < epsilon) return { ...point, x: left };
+  if (Math.abs(point.x - right) < epsilon) return { ...point, x: right };
+  if (Math.abs(point.y - top) < epsilon) return { ...point, y: top };
+  if (Math.abs(point.y - bottom) < epsilon) return { ...point, y: bottom };
+  
+  return point;
 }

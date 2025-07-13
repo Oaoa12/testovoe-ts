@@ -1,4 +1,3 @@
-import * as React from 'react';
 import { render } from '@testing-library/react';
 import CanvasRenderer from './CanvasRenderer';
 import type { Rect, ConnectionPoint, Point } from '../../types';

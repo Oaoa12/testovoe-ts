@@ -1,5 +1,5 @@
 import { dataConverter } from './connectionCalculator';
-import type { Rect, ConnectionPoint, Point } from '../types';
+import type { Rect, ConnectionPoint } from '../types';
 
 describe('dataConverter', () => {
   const rect1: Rect = {

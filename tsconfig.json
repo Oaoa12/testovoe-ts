@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": false,  // Отключаем verbatimModuleSyntax
+    "verbatimModuleSyntax": false,  
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",

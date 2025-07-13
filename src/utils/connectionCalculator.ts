@@ -1,5 +1,8 @@
 import type { Point, Rect, ConnectionPoint } from "../types";
-import { angleToVector, calculateRectBorder } from "./geometry";
+import { angleToVector, calculateRectBorder, getRectBordersWithMargin } from "./geometry";
+
+const CONNECTION_MARGIN = 15;
+const MIN_DISTANCE_BETWEEN_RECTS = 10;
 
 export function dataConverter(
   rect1: Rect,
@@ -7,84 +10,132 @@ export function dataConverter(
   cPoint1: ConnectionPoint,
   cPoint2: ConnectionPoint
 ): Point[] {
-  // 1. Проверяем, не пересекаются ли прямоугольники
   if (checkRectanglesOverlap(rect1, rect2)) {
     throw new Error("Прямоугольники пересекаются или находятся слишком близко");
   }
 
-  // 2. Получаем направления из углов соединения
   const dir1 = angleToVector(cPoint1.angle);
   const dir2 = angleToVector(cPoint2.angle);
 
-  // 3. Определяем базовые точки
-  const start = cPoint1.point;
-  const end = cPoint2.point;
+  const rect1Borders = getRectBordersWithMargin(rect1, CONNECTION_MARGIN);
+  const rect2Borders = getRectBordersWithMargin(rect2, CONNECTION_MARGIN);
 
-  // 4. Строим путь с минимальным количеством поворотов
-  const path = buildOptimalPath(start, end, dir1, dir2, rect1, rect2);
-
-  // 5. Оптимизируем путь (удаляем лишние точки)
-  return optimizePath(path);
-}
-
-// Проверка пересечения прямоугольников
-function checkRectanglesOverlap(rect1: Rect, rect2: Rect): boolean {
-  const r1 = calculateRectBorder(rect1);
-  const r2 = calculateRectBorder(rect2);
+  const start = {
+    x: cPoint1.point.x + dir1.x * CONNECTION_MARGIN,
+    y: cPoint1.point.y + dir1.y * CONNECTION_MARGIN
+  };
   
-  return !(
-    r1.right < r2.left || 
-    r1.left > r2.right || 
-    r1.bottom < r2.top || 
-    r1.top > r2.bottom
-  );
+  const end = {
+    x: cPoint2.point.x + dir2.x * CONNECTION_MARGIN,
+    y: cPoint2.point.y + dir2.y * CONNECTION_MARGIN
+  };
+
+  const isHorizontalPreferred = Math.abs(end.x - start.x) > Math.abs(end.y - start.y);
+
+  const path = buildOptimalPath(start, end, rect1Borders, rect2Borders, isHorizontalPreferred);
+
+  return optimizePath([cPoint1.point, ...path, cPoint2.point]);
 }
 
-// Построение оптимального пути
 function buildOptimalPath(
   start: Point,
   end: Point,
-  dir1: Point,
-  dir2: Point,
-  rect1: Rect,
-  rect2: Rect
+  rect1Borders: ReturnType<typeof calculateRectBorder>,
+  rect2Borders: ReturnType<typeof calculateRectBorder>,
+  isHorizontalPreferred: boolean
 ): Point[] {
-  const path: Point[] = [start];
-  const buffer = 20; // Отступ от прямоугольников
+  const midPoints: Point[] = [];
 
-  // Первый сегмент от начальной точки
-  const firstSegment = {
-    x: start.x + dir1.x * buffer,
-    y: start.y + dir1.y * buffer
-  };
-  path.push(firstSegment);
-
-  // Определяем основной направление соединения
-  const isHorizontal = Math.abs(end.x - start.x) > Math.abs(end.y - start.y);
-
-  // Промежуточные точки
-  if (isHorizontal) {
-    const midY = (firstSegment.y + end.y) / 2;
-    path.push({ x: firstSegment.x, y: midY });
-    path.push({ x: end.x, y: midY });
+  if (isHorizontalPreferred) {
+    const midY = (start.y + end.y) / 2;
+    midPoints.push({ x: start.x, y: midY });
+    midPoints.push({ x: end.x, y: midY });
   } else {
-    const midX = (firstSegment.x + end.x) / 2;
-    path.push({ x: midX, y: firstSegment.y });
-    path.push({ x: midX, y: end.y });
+    const midX = (start.x + end.x) / 2;
+    midPoints.push({ x: midX, y: start.y });
+    midPoints.push({ x: midX, y: end.y });
   }
 
-  // Последний сегмент к конечной точке
-  const lastSegment = {
-    x: end.x + dir2.x * buffer,
-    y: end.y + dir2.y * buffer
-  };
-  path.push(lastSegment);
-  path.push(end);
+  if (!doesPathIntersectRects([start, ...midPoints, end], rect1Borders, rect2Borders)) {
+    return midPoints;
+  }
 
-  return path;
+  const alternative1 = [
+    { x: start.x, y: end.y },
+    { x: end.x, y: start.y }
+  ];
+
+  for (const point of alternative1) {
+    if (!doesPathIntersectRects([start, point, end], rect1Borders, rect2Borders)) {
+      return [point];
+    }
+  }
+
+  return buildBypassPath(start, end, rect1Borders, rect2Borders);
 }
 
-// Оптимизация пути (удаление коллинеарных точек)
+function buildBypassPath(
+  start: Point,
+  end: Point,
+  rect1Borders: ReturnType<typeof calculateRectBorder>,
+  rect2Borders: ReturnType<typeof calculateRectBorder>
+): Point[] {
+  const shouldGoAbove = start.y < rect1Borders.top && end.y < rect2Borders.top;
+  const shouldGoLeft = start.x < rect1Borders.left && end.x < rect2Borders.left;
+
+  if (shouldGoAbove) {
+    const y = Math.min(rect1Borders.top, rect2Borders.top) - CONNECTION_MARGIN;
+    return [
+      { x: start.x, y },
+      { x: end.x, y }
+    ];
+  } else if (shouldGoLeft) {
+    const x = Math.min(rect1Borders.left, rect2Borders.left) - CONNECTION_MARGIN;
+    return [
+      { x, y: start.y },
+      { x, y: end.y }
+    ];
+  } else {
+    const x = Math.max(rect1Borders.right, rect2Borders.right) + CONNECTION_MARGIN;
+    return [
+      { x, y: start.y },
+      { x, y: end.y }
+    ];
+  }
+}
+
+function doesPathIntersectRects(
+  path: Point[],
+  rect1Borders: ReturnType<typeof calculateRectBorder>,
+  rect2Borders: ReturnType<typeof calculateRectBorder>
+): boolean {
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    
+    if (doesSegmentIntersectRect(a, b, rect1Borders)) return true;
+    if (doesSegmentIntersectRect(a, b, rect2Borders)) return true;
+  }
+  return false;
+}
+
+function doesSegmentIntersectRect(a: Point, b: Point, rect: ReturnType<typeof calculateRectBorder>): boolean {
+  return (
+    lineIntersectsLine(a, b, { x: rect.left, y: rect.top }, { x: rect.right, y: rect.top }) ||
+    lineIntersectsLine(a, b, { x: rect.right, y: rect.top }, { x: rect.right, y: rect.bottom }) ||
+    lineIntersectsLine(a, b, { x: rect.right, y: rect.bottom }, { x: rect.left, y: rect.bottom }) ||
+    lineIntersectsLine(a, b, { x: rect.left, y: rect.bottom }, { x: rect.left, y: rect.top })
+  );
+}
+
+function lineIntersectsLine(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+  const ccw = (A: Point, B: Point, C: Point) => 
+    (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+  
+  return ccw(a1, b1, b2) !== ccw(a2, b1, b2) && 
+         ccw(a1, a2, b1) !== ccw(a1, a2, b2);
+}
+
 function optimizePath(points: Point[]): Point[] {
   if (points.length < 3) return points;
 
@@ -103,7 +154,18 @@ function optimizePath(points: Point[]): Point[] {
   return optimized;
 }
 
-// Определение направления между точками
 function getDirection(a: Point, b: Point): 'h' | 'v' {
   return Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? 'h' : 'v';
+}
+
+function checkRectanglesOverlap(rect1: Rect, rect2: Rect): boolean {
+  const r1 = calculateRectBorder(rect1);
+  const r2 = calculateRectBorder(rect2);
+  
+  return !(
+    r1.right + MIN_DISTANCE_BETWEEN_RECTS < r2.left ||
+    r1.left - MIN_DISTANCE_BETWEEN_RECTS > r2.right || 
+    r1.bottom + MIN_DISTANCE_BETWEEN_RECTS < r2.top || 
+    r1.top - MIN_DISTANCE_BETWEEN_RECTS > r2.bottom
+  );
 }

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import CanvasRenderer from '../canvasRenderer/CanvasRenderer';
 import { dataConverter } from '../../utils/connectionCalculator';
 import { validateConnection } from '../../utils/validation';
-import type { Rect, ConnectionPoint, Point, Size } from '../../types';
+import type { Rect, ConnectionPoint, Point } from '../../types';
 
 const RectangleConnector: React.FC = () => {
   const [rect1, setRect1] = useState<Rect>({
@@ -43,7 +43,7 @@ const RectangleConnector: React.FC = () => {
     setRect1(prev => ({ ...prev, position }));
     setCPoint1(prev => ({
       ...prev,
-      point: calculateConnectionPointOnRect(position, rect1.size, prev.point, rect1.position)
+      point: calculateConnectionPointOnRect(position, prev.point, rect1.position)
     }));
   };
 
@@ -51,13 +51,12 @@ const RectangleConnector: React.FC = () => {
     setRect2(prev => ({ ...prev, position }));
     setCPoint2(prev => ({
       ...prev,
-      point: calculateConnectionPointOnRect(position, rect2.size, prev.point, rect2.position)
+      point: calculateConnectionPointOnRect(position, prev.point, rect2.position)
     }));
   };
 
   const calculateConnectionPointOnRect = (
     newPosition: Point,
-    size: Size,
     oldPoint: Point,
     oldPosition: Point
   ): Point => {

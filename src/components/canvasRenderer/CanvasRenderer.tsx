@@ -36,15 +36,15 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawRect(ctx, rect1, '#4CAF50');
-    drawRect(ctx, rect2, '#2196F3');
+    drawRect(ctx, rect1);
+    drawRect(ctx, rect2);
     drawConnectionPoint(ctx, cPoint1, '#FF5722');
     drawConnectionPoint(ctx, cPoint2, '#FF5722');
     drawConnectionPath(ctx, connectionPath);
   }, [rect1, rect2, cPoint1, cPoint2, connectionPath]);
 
-  const drawRect = (ctx: CanvasRenderingContext2D, rect: Rect, color: string) => {
-    ctx.fillStyle = color;
+  const drawRect = (ctx: CanvasRenderingContext2D, rect: Rect) => {
+    ctx.fillStyle = '#2196F3';
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 2;
     
