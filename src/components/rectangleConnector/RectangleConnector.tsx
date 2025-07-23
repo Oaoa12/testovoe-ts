@@ -7,22 +7,22 @@ import type { Rect, ConnectionPoint, Point } from '../../types';
 const RectangleConnector: React.FC = () => {
   const [rect1, setRect1] = useState<Rect>({
     position: { x: 200, y: 200 },
-    size: { width: 100, height: 80 }
+    size: { width: 100, height: 80 },
   });
 
   const [rect2, setRect2] = useState<Rect>({
     position: { x: 500, y: 300 },
-    size: { width: 120, height: 60 }
+    size: { width: 120, height: 60 },
   });
 
   const [cPoint1, setCPoint1] = useState<ConnectionPoint>({
     point: { x: 250, y: 200 },
-    angle: 0
+    angle: 0,
   });
 
   const [cPoint2, setCPoint2] = useState<ConnectionPoint>({
     point: { x: 500, y: 270 },
-    angle: 270
+    angle: 270,
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -40,26 +40,22 @@ const RectangleConnector: React.FC = () => {
   }, [rect1, rect2, cPoint1, cPoint2]);
 
   const handleRect1Move = (position: Point) => {
-    setRect1(prev => ({ ...prev, position }));
-    setCPoint1(prev => ({
+    setRect1((prev) => ({ ...prev, position }));
+    setCPoint1((prev) => ({
       ...prev,
-      point: calculateConnectionPointOnRect(position, prev.point, rect1.position)
+      point: calculateConnectionPointOnRect(position, prev.point, rect1.position),
     }));
   };
 
   const handleRect2Move = (position: Point) => {
-    setRect2(prev => ({ ...prev, position }));
-    setCPoint2(prev => ({
+    setRect2((prev) => ({ ...prev, position }));
+    setCPoint2((prev) => ({
       ...prev,
-      point: calculateConnectionPointOnRect(position, prev.point, rect2.position)
+      point: calculateConnectionPointOnRect(position, prev.point, rect2.position),
     }));
   };
 
-  const calculateConnectionPointOnRect = (
-    newPosition: Point,
-    oldPoint: Point,
-    oldPosition: Point
-  ): Point => {
+  const calculateConnectionPointOnRect = (newPosition: Point, oldPoint: Point, oldPosition: Point): Point => {
     const dx = newPosition.x - oldPosition.x;
     const dy = newPosition.y - oldPosition.y;
     return { x: oldPoint.x + dx, y: oldPoint.y + dy };
@@ -67,7 +63,7 @@ const RectangleConnector: React.FC = () => {
 
   return (
     <div>
-      {error && <div style={{ color: 'red' }}>Ошибка: {error}</div>}
+      {error && <div className="error">{error}</div>}
       <CanvasRenderer
         rect1={rect1}
         rect2={rect2}
@@ -79,11 +75,10 @@ const RectangleConnector: React.FC = () => {
         onConnectionPoint1Change={setCPoint1}
         onConnectionPoint2Change={setCPoint2}
       />
-      <div style={{ marginTop: '20px' }}>
+      <div className="info">
         <h3>Прямоугольник 1</h3>
         <div>Позиция: X: {rect1.position.x.toFixed(0)}, Y: {rect1.position.y.toFixed(0)}</div>
         <div>Размер: Ширина: {rect1.size.width}, Высота: {rect1.size.height}</div>
-        
         <h3>Прямоугольник 2</h3>
         <div>Позиция: X: {rect2.position.x.toFixed(0)}, Y: {rect2.position.y.toFixed(0)}</div>
         <div>Размер: Ширина: {rect2.size.width}, Высота: {rect2.size.height}</div>

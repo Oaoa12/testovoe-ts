@@ -1,120 +1,153 @@
-import type { Point, Rect, ConnectionPoint } from "../types";
-import { angleToVector, calculateRectBorder, getRectBordersWithMargin } from "./geometry";
+import type { Point, Rect, ConnectionPoint } from '../types';
+import { angleToVector, calculateRectBorder, getRectBordersWithMargin } from './geometry';
 
-const CONNECTION_MARGIN = 15;
-const MIN_DISTANCE_BETWEEN_RECTS = 10;
+const CONNECTION_MARGIN = 10;
+const MIN_DISTANCE_BETWEEN_RECTS = 5;
 
-export function dataConverter(
-  rect1: Rect,
-  rect2: Rect,
-  cPoint1: ConnectionPoint,
-  cPoint2: ConnectionPoint
-): Point[] {
+export function dataConverter(rect1: Rect, rect2: Rect, cPoint1: ConnectionPoint, cPoint2: ConnectionPoint): Point[] {
   if (checkRectanglesOverlap(rect1, rect2)) {
-    throw new Error("Прямоугольники пересекаются или находятся слишком близко");
+    throw new Error('Прямоугольники пересекаются или находятся слишком близко');
   }
 
   const dir1 = angleToVector(cPoint1.angle);
   const dir2 = angleToVector(cPoint2.angle);
 
+  const start = {
+    x: cPoint1.point.x + dir1.x * CONNECTION_MARGIN,
+    y: cPoint1.point.y + dir1.y * CONNECTION_MARGIN,
+  };
+
+  const end = {
+    x: cPoint2.point.x + dir2.x * CONNECTION_MARGIN,
+    y: cPoint2.point.y + dir2.y * CONNECTION_MARGIN,
+  };
+
   const rect1Borders = getRectBordersWithMargin(rect1, CONNECTION_MARGIN);
   const rect2Borders = getRectBordersWithMargin(rect2, CONNECTION_MARGIN);
 
-  const start = {
-    x: cPoint1.point.x + dir1.x * CONNECTION_MARGIN,
-    y: cPoint1.point.y + dir1.y * CONNECTION_MARGIN
-  };
-  
-  const end = {
-    x: cPoint2.point.x + dir2.x * CONNECTION_MARGIN,
-    y: cPoint2.point.y + dir2.y * CONNECTION_MARGIN
-  };
-
-  const isHorizontalPreferred = Math.abs(end.x - start.x) > Math.abs(end.y - start.y);
-
-  const path = buildOptimalPath(start, end, rect1Borders, rect2Borders, isHorizontalPreferred);
-
-  return optimizePath([cPoint1.point, ...path, cPoint2.point]);
+  const path = findOptimalPath(start, end, rect1Borders, rect2Borders);
+  return path.length > 0 ? [cPoint1.point, ...path, cPoint2.point] : [];
 }
 
-function buildOptimalPath(
-  start: Point,
-  end: Point,
-  rect1Borders: ReturnType<typeof calculateRectBorder>,
-  rect2Borders: ReturnType<typeof calculateRectBorder>,
-  isHorizontalPreferred: boolean
-): Point[] {
-  const midPoints: Point[] = [];
-
-  if (isHorizontalPreferred) {
-    const midY = (start.y + end.y) / 2;
-    midPoints.push({ x: start.x, y: midY });
-    midPoints.push({ x: end.x, y: midY });
-  } else {
-    const midX = (start.x + end.x) / 2;
-    midPoints.push({ x: midX, y: start.y });
-    midPoints.push({ x: midX, y: end.y });
-  }
-
-  if (!doesPathIntersectRects([start, ...midPoints, end], rect1Borders, rect2Borders)) {
-    return midPoints;
-  }
-
-  const alternative1 = [
-    { x: start.x, y: end.y },
-    { x: end.x, y: start.y }
-  ];
-
-  for (const point of alternative1) {
-    if (!doesPathIntersectRects([start, point, end], rect1Borders, rect2Borders)) {
-      return [point];
-    }
-  }
-
-  return buildBypassPath(start, end, rect1Borders, rect2Borders);
+function checkRectanglesOverlap(rect1: Rect, rect2: Rect): boolean {
+  const r1 = calculateRectBorder(rect1);
+  const r2 = calculateRectBorder(rect2);
+  return !(
+    r1.right + MIN_DISTANCE_BETWEEN_RECTS < r2.left ||
+    r1.left - MIN_DISTANCE_BETWEEN_RECTS > r2.right ||
+    r1.bottom + MIN_DISTANCE_BETWEEN_RECTS < r2.top ||
+    r1.top - MIN_DISTANCE_BETWEEN_RECTS > r2.bottom
+  );
 }
 
-function buildBypassPath(
-  start: Point,
-  end: Point,
-  rect1Borders: ReturnType<typeof calculateRectBorder>,
-  rect2Borders: ReturnType<typeof calculateRectBorder>
-): Point[] {
-  const shouldGoAbove = start.y < rect1Borders.top && end.y < rect2Borders.top;
-  const shouldGoLeft = start.x < rect1Borders.left && end.x < rect2Borders.left;
+function findOptimalPath(start: Point, end: Point, rect1Borders: ReturnType<typeof calculateRectBorder>, rect2Borders: ReturnType<typeof calculateRectBorder>): Point[] {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
 
-  if (shouldGoAbove) {
-    const y = Math.min(rect1Borders.top, rect2Borders.top) - CONNECTION_MARGIN;
-    return [
-      { x: start.x, y },
-      { x: end.x, y }
-    ];
-  } else if (shouldGoLeft) {
-    const x = Math.min(rect1Borders.left, rect2Borders.left) - CONNECTION_MARGIN;
-    return [
-      { x, y: start.y },
-      { x, y: end.y }
-    ];
-  } else {
-    const x = Math.max(rect1Borders.right, rect2Borders.right) + CONNECTION_MARGIN;
-    return [
-      { x, y: start.y },
-      { x, y: end.y }
-    ];
+  const paths: { points: Point[]; length: number; turns: number }[] = [];
+
+  paths.push({
+    points: [{ x: start.x, y: end.y }],
+    length: Math.abs(dx) + Math.abs(dy),
+    turns: dx !== 0 && dy !== 0 ? 1 : 0,
+  });
+
+  paths.push({
+    points: [{ x: end.x, y: start.y }],
+    length: Math.abs(dx) + Math.abs(dy),
+    turns: dx !== 0 && dy !== 0 ? 1 : 0,
+  });
+
+  const midX = dx > 0 ? Math.max(start.x, end.x) + CONNECTION_MARGIN : Math.min(start.x, end.x) - CONNECTION_MARGIN;
+  const midY = dy > 0 ? Math.max(start.y, end.y) + CONNECTION_MARGIN : Math.min(start.y, end.y) - CONNECTION_MARGIN;
+
+  paths.push({
+    points: [
+      { x: midX, y: start.y },
+      { x: midX, y: end.y },
+    ],
+    length: Math.abs(midX - start.x) + Math.abs(midX - end.x) + Math.abs(dy),
+    turns: 2,
+  });
+
+  paths.push({
+    points: [
+      { x: start.x, y: midY },
+      { x: end.x, y: midY },
+    ],
+    length: Math.abs(dx) + Math.abs(midY - start.y) + Math.abs(midY - end.y),
+    turns: 2,
+  });
+
+  const validPaths = paths.filter((path) => !doesPathIntersectRects([start, ...path.points, end], rect1Borders, rect2Borders));
+
+  if (validPaths.length === 0) {
+    return buildComplexPath(start, end, rect1Borders, rect2Borders);
   }
+
+  validPaths.sort((a, b) => (a.length !== b.length ? a.length - b.length : a.turns - b.turns));
+  return validPaths[0].points;
 }
 
-function doesPathIntersectRects(
-  path: Point[],
-  rect1Borders: ReturnType<typeof calculateRectBorder>,
-  rect2Borders: ReturnType<typeof calculateRectBorder>
-): boolean {
+function buildComplexPath(start: Point, end: Point, rect1Borders: ReturnType<typeof calculateRectBorder>, rect2Borders: ReturnType<typeof calculateRectBorder>): Point[] {
+  const paths: { points: Point[]; length: number; turns: number }[] = [];
+
+  const safeX = Math.max(rect1Borders.right, rect2Borders.right) + CONNECTION_MARGIN;
+  const safeY = Math.max(rect1Borders.bottom, rect2Borders.bottom) + CONNECTION_MARGIN;
+  const safeXMin = Math.min(rect1Borders.left, rect2Borders.left) - CONNECTION_MARGIN;
+  const safeYMin = Math.min(rect1Borders.top, rect2Borders.top) - CONNECTION_MARGIN;
+
+  paths.push({
+    points: [
+      { x: start.x, y: safeY },
+      { x: end.x, y: safeY },
+    ],
+    length: Math.abs(end.x - start.x) + Math.abs(safeY - start.y) + Math.abs(safeY - end.y),
+    turns: 2,
+  });
+
+  paths.push({
+    points: [
+      { x: safeX, y: start.y },
+      { x: safeX, y: end.y },
+    ],
+    length: Math.abs(safeX - start.x) + Math.abs(safeX - end.x) + Math.abs(end.y - start.y),
+    turns: 2,
+  });
+
+  paths.push({
+    points: [
+      { x: start.x, y: safeYMin },
+      { x: end.x, y: safeYMin },
+    ],
+    length: Math.abs(end.x - start.x) + Math.abs(safeYMin - start.y) + Math.abs(safeYMin - end.y),
+    turns: 2,
+  });
+
+  paths.push({
+    points: [
+      { x: safeXMin, y: start.y },
+      { x: safeXMin, y: end.y },
+    ],
+    length: Math.abs(safeXMin - start.x) + Math.abs(safeXMin - end.x) + Math.abs(end.y - start.y),
+    turns: 2,
+  });
+
+  const validPaths = paths.filter((path) => !doesPathIntersectRects([start, ...path.points, end], rect1Borders, rect2Borders));
+
+  if (validPaths.length === 0) {
+    return [];
+  }
+
+  validPaths.sort((a, b) => (a.length !== b.length ? a.length - b.length : a.turns - b.turns));
+  return validPaths[0].points;
+}
+
+function doesPathIntersectRects(path: Point[], rect1Borders: ReturnType<typeof calculateRectBorder>, rect2Borders: ReturnType<typeof calculateRectBorder>): boolean {
   for (let i = 0; i < path.length - 1; i++) {
-    const a = path[i];
-    const b = path[i + 1];
-    
-    if (doesSegmentIntersectRect(a, b, rect1Borders)) return true;
-    if (doesSegmentIntersectRect(a, b, rect2Borders)) return true;
+    if (doesSegmentIntersectRect(path[i], path[i + 1], rect1Borders) || doesSegmentIntersectRect(path[i], path[i + 1], rect2Borders)) {
+      return true;
+    }
   }
   return false;
 }
@@ -129,43 +162,6 @@ function doesSegmentIntersectRect(a: Point, b: Point, rect: ReturnType<typeof ca
 }
 
 function lineIntersectsLine(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
-  const ccw = (A: Point, B: Point, C: Point) => 
-    (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
-  
-  return ccw(a1, b1, b2) !== ccw(a2, b1, b2) && 
-         ccw(a1, a2, b1) !== ccw(a1, a2, b2);
-}
-
-function optimizePath(points: Point[]): Point[] {
-  if (points.length < 3) return points;
-
-  const optimized = [points[0]];
-  let prevDir = getDirection(points[0], points[1]);
-
-  for (let i = 1; i < points.length - 1; i++) {
-    const currDir = getDirection(points[i], points[i + 1]);
-    if (currDir !== prevDir) {
-      optimized.push(points[i]);
-      prevDir = currDir;
-    }
-  }
-
-  optimized.push(points[points.length - 1]);
-  return optimized;
-}
-
-function getDirection(a: Point, b: Point): 'h' | 'v' {
-  return Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? 'h' : 'v';
-}
-
-function checkRectanglesOverlap(rect1: Rect, rect2: Rect): boolean {
-  const r1 = calculateRectBorder(rect1);
-  const r2 = calculateRectBorder(rect2);
-  
-  return !(
-    r1.right + MIN_DISTANCE_BETWEEN_RECTS < r2.left ||
-    r1.left - MIN_DISTANCE_BETWEEN_RECTS > r2.right || 
-    r1.bottom + MIN_DISTANCE_BETWEEN_RECTS < r2.top || 
-    r1.top - MIN_DISTANCE_BETWEEN_RECTS > r2.bottom
-  );
+  const ccw = (A: Point, B: Point, C: Point) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+  return ccw(a1, b1, b2) !== ccw(a2, b1, b2) && ccw(a1, a2, b1) !== ccw(a1, a2, b2);
 }
